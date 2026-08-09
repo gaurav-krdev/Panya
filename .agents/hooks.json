@@ -1,0 +1,12 @@
+{
+  "save-chat-history": {
+    "enabled": true,
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node scripts/save_chat.js",
+        "timeout": 30
+      }
+    ]
+  }
+}
