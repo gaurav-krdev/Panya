@@ -48,10 +48,10 @@ export default function SandboxScreen() {
 
   const contentPlatformStyle = Platform.select({
     android: {
-      paddingTop: safeAreaInsets.top + Spacing.three,
+      paddingTop: Spacing.three,
       paddingLeft: safeAreaInsets.left,
       paddingRight: safeAreaInsets.right,
-      paddingBottom: safeAreaInsets.bottom + BottomTabInset + Spacing.four,
+      paddingBottom: Spacing.four,
     },
     web: {
       paddingTop: isSmallScreen ? Spacing.four : 85,

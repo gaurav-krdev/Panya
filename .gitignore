@@ -47,3 +47,8 @@ chat_history/
 .gemini/
 *.log
 
+# Ignore all markdown documentation files
+*.md
+!README.md
+
+

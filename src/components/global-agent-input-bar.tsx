@@ -1,6 +1,7 @@
 // src/components/global-agent-input-bar.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, useWindowDimensions, NativeModules, NativeEventEmitter } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 
 import { Spacing, MaxContentWidth } from '@/constants/theme';
@@ -11,6 +12,7 @@ import { agentEngine } from '@/utils/agentEngine';
 export function GlobalAgentInputBar() {
   const theme = useTheme();
   const agentState = useAgentState();
+  const safeAreaInsets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
 
   const [inputVal, setInputVal] = useState('');
@@ -171,7 +173,16 @@ export function GlobalAgentInputBar() {
   const isSmallScreen = width < 640;
 
   return (
-    <View style={[styles.outerContainer, { borderTopColor: theme.border, backgroundColor: theme.backgroundElement }]}>
+    <View
+      style={[
+        styles.outerContainer,
+        {
+          borderTopColor: theme.border,
+          backgroundColor: theme.backgroundElement,
+          paddingBottom: Math.max(safeAreaInsets.bottom, Spacing.two),
+        },
+      ]}
+    >
       <View style={styles.inputWrapper}>
         {/* Listening Indicator Badge */}
         {isListening && (
@@ -196,6 +207,7 @@ export function GlobalAgentInputBar() {
           <View style={styles.controlsRow}>
             {/* MIC BUTTON */}
             <TouchableOpacity
+              activeOpacity={0.7}
               style={[
                 styles.micBtn,
                 {
@@ -206,15 +218,14 @@ export function GlobalAgentInputBar() {
               onPress={toggleSpeechListening}
               disabled={agentState.isAgentRunning}
             >
-              <SymbolView
-                tintColor={isListening ? '#ffffff' : theme.textSecondary}
-                name={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
-                size={16}
-              />
+              <Text style={{ fontSize: 15, color: isListening ? '#ffffff' : theme.textSecondary }}>
+                🎙️
+              </Text>
             </TouchableOpacity>
 
             {/* SEND BUTTON */}
             <TouchableOpacity
+              activeOpacity={0.7}
               style={[
                 styles.sendBtn,
                 {
@@ -224,11 +235,9 @@ export function GlobalAgentInputBar() {
               onPress={handleSendCommand}
               disabled={agentState.isAgentRunning || !inputVal.trim()}
             >
-              <SymbolView
-                tintColor="#ffffff"
-                name={{ ios: 'paperplane.fill', android: 'send', web: 'send' }}
-                size={14}
-              />
+              <Text style={{ fontSize: 13, color: '#ffffff', fontWeight: 'bold' }}>
+                ➤
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -25,17 +25,7 @@ export default function HomeScreen() {
     else if (themePref === 'light') nextPref = 'dark';
     else nextPref = 'system';
 
-    setThemePreference(nextPref);
-    setThemePrefState(nextPref);
   };
-
-  // Modal & Routine Form State
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
-  const [formName, setFormName] = useState('');
-  const [formTime, setFormTime] = useState('09:00');
-  const [formSteps, setFormSteps] = useState('');
-  const [formInterval, setFormInterval] = useState('15');
 
   // Clock Update Interval & Routine Follow-Up Engine Check
   useEffect(() => {
@@ -72,12 +62,43 @@ export default function HomeScreen() {
     agentEngine.runRoutine(id);
   };
 
+  // Modal & Routine Form State
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
+  const [formName, setFormName] = useState('');
+  const [formTime, setFormTime] = useState('09:00');
+  const [formSteps, setFormSteps] = useState('');
+  const [formInterval, setFormInterval] = useState('15');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Time Validation Helper (HH:MM format, 00:00 to 23:59)
+  const validate24HourTime = (timeStr: string): boolean => {
+    if (!timeStr) return false;
+    const trimmed = timeStr.trim();
+    const regex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+    return regex.test(trimmed);
+  };
+
+  // Time Sanitizer
+  const handleTimeChange = (text: string) => {
+    setFormError(null);
+    // Strip everything except digits and colon
+    let cleaned = text.replace(/[^0-9:]/g, '');
+    if (cleaned.length > 5) cleaned = cleaned.slice(0, 5);
+    // Auto-insert colon if 2 digits entered
+    if (cleaned.length === 2 && !cleaned.includes(':') && formTime.length === 1) {
+      cleaned = cleaned + ':';
+    }
+    setFormTime(cleaned);
+  };
+
   const handleOpenAddRoutine = () => {
     setEditingRoutineId(null);
     setFormName('');
     setFormTime('09:00');
     setFormSteps('Analyze agenda, Notify user of checklist');
     setFormInterval('15');
+    setFormError(null);
     setModalVisible(true);
   };
 
@@ -87,18 +108,29 @@ export default function HomeScreen() {
     setFormTime(routine.time);
     setFormSteps(routine.steps.map((s: any) => s.text).join(', '));
     setFormInterval(String(routine.followUpIntervalMinutes || 15));
+    setFormError(null);
     setModalVisible(true);
   };
 
   const handleSaveRoutine = () => {
-    if (!formName.trim()) return;
+    setFormError(null);
+    if (!formName.trim()) {
+      setFormError('Please enter a routine name.');
+      return;
+    }
+
+    if (!validate24HourTime(formTime)) {
+      setFormError('Invalid time! Must be 24-hr format (00:00 to 23:59, e.g. 08:30 or 14:15). Non-numeric characters or hours > 23 are not allowed.');
+      return;
+    }
+
     const parsedSteps = formSteps
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
       .map((text) => ({ text, action: 'custom_step' }));
 
-    const intervalMinutes = parseInt(formInterval, 10) || 15;
+    const intervalMinutes = Math.max(1, parseInt(formInterval, 10) || 15);
 
     if (editingRoutineId) {
       agentEngine.updateRoutine(editingRoutineId, {
@@ -123,10 +155,10 @@ export default function HomeScreen() {
 
   const contentPlatformStyle = Platform.select({
     android: {
-      paddingTop: safeAreaInsets.top + Spacing.three,
+      paddingTop: Spacing.three,
       paddingLeft: safeAreaInsets.left,
       paddingRight: safeAreaInsets.right,
-      paddingBottom: safeAreaInsets.bottom + BottomTabInset + Spacing.four,
+      paddingBottom: Spacing.four,
     },
     web: {
       paddingTop: isSmallScreen ? Spacing.four : 85,
@@ -318,12 +350,18 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
+            {formError && (
+              <View style={{ backgroundColor: '#ef444418', borderColor: '#ef4444', borderWidth: 1, padding: 8, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>⚠️ {formError}</Text>
+              </View>
+            )}
+
             <View style={styles.formGroup}>
               <ThemedText type="smallBold">Routine Name</ThemedText>
               <TextInput
                 style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
                 value={formName}
-                onChangeText={setFormName}
+                onChangeText={(val) => { setFormError(null); setFormName(val); }}
                 placeholder="e.g. Morning Routine Sync"
                 placeholderTextColor={theme.textSecondary}
               />
@@ -331,12 +369,14 @@ export default function HomeScreen() {
 
             <View style={styles.formRow}>
               <View style={[styles.formGroup, { flex: 1 }]}>
-                <ThemedText type="smallBold">Scheduled Time</ThemedText>
+                <ThemedText type="smallBold">Scheduled Time (24h)</ThemedText>
                 <TextInput
-                  style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                  style={[styles.modalInput, { color: theme.text, borderColor: formError && formError.includes('time') ? '#ef4444' : theme.border, backgroundColor: theme.background }]}
                   value={formTime}
-                  onChangeText={setFormTime}
-                  placeholder="HH:MM (e.g. 08:30)"
+                  onChangeText={handleTimeChange}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
+                  placeholder="HH:MM (08:30)"
                   placeholderTextColor={theme.textSecondary}
                 />
               </View>
@@ -345,7 +385,7 @@ export default function HomeScreen() {
                 <TextInput
                   style={[styles.modalInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
                   value={formInterval}
-                  onChangeText={setFormInterval}
+                  onChangeText={(val) => { setFormError(null); setFormInterval(val.replace(/[^0-9]/g, '')); }}
                   keyboardType="numeric"
                   placeholder="15"
                   placeholderTextColor={theme.textSecondary}
@@ -402,13 +442,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
     marginTop: Spacing.three,
     marginBottom: Spacing.two,
+    width: '100%',
   },
   headerRightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
+    flexWrap: 'wrap',
+    gap: Spacing.one + 2,
+    maxWidth: '100%',
   },
   themeToggleBtn: {
     paddingVertical: Spacing.one,

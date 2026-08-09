@@ -135,8 +135,13 @@ class AgentSimulator {
     };
   }
 
-  public getState() {
-    return this.state;
+  public getState(): AppState {
+    return {
+      ...this.state,
+      routines: [...this.state.routines],
+      todos: [...this.state.todos],
+      agentLogs: [...this.state.agentLogs],
+    };
   }
 
   public subscribe(listener: () => void) {
@@ -151,12 +156,15 @@ class AgentSimulator {
   }
 
   public addLog(type: AgentLog['type'], text: string) {
-    this.state.agentLogs.push({
-      id: Math.random().toString(),
-      type,
-      text,
-      timestamp: new Date().toLocaleTimeString(),
-    });
+    this.state.agentLogs = [
+      ...this.state.agentLogs,
+      {
+        id: Math.random().toString(),
+        type,
+        text,
+        timestamp: new Date().toLocaleTimeString(),
+      },
+    ];
     this.notify();
   }
 
@@ -199,7 +207,7 @@ class AgentSimulator {
       followUpIntervalMinutes,
       steps: steps.length > 0 ? steps : [{ text: `Execute routine: ${name}`, action: 'custom_action' }],
     };
-    this.state.routines.push(newRoutine);
+    this.state.routines = [...this.state.routines, newRoutine];
     this.addLog('success', `Created new routine "${name}" scheduled for ${time}.`);
     this.notify();
   }
