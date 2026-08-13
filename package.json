@@ -41,4 +41,5 @@
     "lint": "expo lint"
   },
   "private": true
+  
 }
