@@ -1,4 +1,10 @@
 // src/utils/agentEngine.ts
+import {
+  fireFollowUpNotification,
+  scheduleRoutineAlarm,
+  cancelRoutineAlarm,
+  syncRoutineAlarms,
+} from './notificationService';
 
 export interface AgentLog {
   id: string;
@@ -177,6 +183,19 @@ class AgentSimulator {
     this.state.routines = this.state.routines.map((r) =>
       r.id === id ? { ...r, enabled: !r.enabled } : r
     );
+
+    // Sync the OS alarm: schedule if enabled+pending, cancel if disabled
+    const routine = this.state.routines.find((r) => r.id === id);
+    if (routine) {
+      if (routine.enabled && !routine.completed) {
+        scheduleRoutineAlarm(routine.id, routine.name, routine.time, routine.steps)
+          .catch((err) => console.warn('[Panya] Failed to schedule alarm:', err));
+      } else {
+        cancelRoutineAlarm(routine.id)
+          .catch((err) => console.warn('[Panya] Failed to cancel alarm:', err));
+      }
+    }
+
     this.notify();
   }
 
@@ -187,9 +206,19 @@ class AgentSimulator {
         this.addLog(
           nextCompleted ? 'success' : 'info',
           nextCompleted
-            ? `Routine "${r.name}" marked as DONE. 15-min follow-up sequence paused.`
-            : `Routine "${r.name}" marked PENDING. 15-min follow-up sequence active.`
+            ? `Routine "${r.name}" marked as DONE. Follow-up sequence paused.`
+            : `Routine "${r.name}" marked PENDING. Follow-up sequence active.`
         );
+
+        // Sync OS alarm
+        if (nextCompleted) {
+          cancelRoutineAlarm(r.id)
+            .catch((err) => console.warn('[Panya] Failed to cancel alarm:', err));
+        } else if (r.enabled) {
+          scheduleRoutineAlarm(r.id, r.name, r.time, r.steps)
+            .catch((err) => console.warn('[Panya] Failed to schedule alarm:', err));
+        }
+
         return { ...r, completed: nextCompleted };
       }
       return r;
@@ -209,6 +238,11 @@ class AgentSimulator {
     };
     this.state.routines = [...this.state.routines, newRoutine];
     this.addLog('success', `Created new routine "${name}" scheduled for ${time}.`);
+
+    // Schedule a real OS alarm for this routine
+    scheduleRoutineAlarm(newRoutine.id, name, time, newRoutine.steps)
+      .catch((err) => console.warn('[Panya] Failed to schedule alarm:', err));
+
     this.notify();
   }
 
@@ -217,6 +251,14 @@ class AgentSimulator {
       r.id === id ? { ...r, ...updates } : r
     );
     this.addLog('info', `Updated routine details.`);
+
+    // Re-schedule the OS alarm with the updated time/steps
+    const routine = this.state.routines.find((r) => r.id === id);
+    if (routine && routine.enabled && !routine.completed) {
+      scheduleRoutineAlarm(routine.id, routine.name, routine.time, routine.steps)
+        .catch((err) => console.warn('[Panya] Failed to reschedule alarm after edit:', err));
+    }
+
     this.notify();
   }
 
@@ -224,6 +266,8 @@ class AgentSimulator {
     const routine = this.state.routines.find((r) => r.id === id);
     this.state.routines = this.state.routines.filter((r) => r.id !== id);
     if (routine) {
+      cancelRoutineAlarm(routine.id)
+        .catch((err) => console.warn('[Panya] Failed to cancel alarm:', err));
       this.addLog('info', `Deleted routine "${routine.name}".`);
     }
     this.notify();
@@ -232,15 +276,23 @@ class AgentSimulator {
   public checkRoutineFollowUps() {
     if (this.state.isAgentRunning) return;
     const now = Date.now();
-    const intervalMs = 15 * 60 * 1000; // 15 Minutes
 
     for (const routine of this.state.routines) {
       if (routine.enabled && !routine.completed) {
+        const intervalMs = (routine.followUpIntervalMinutes || 15) * 60 * 1000;
         const lastRun = routine.lastRunTimestamp || 0;
         if (now - lastRun >= intervalMs) {
           routine.lastRunTimestamp = now;
-          this.addLog('thought', `⏰ 15-MIN FOLLOW-UP: Pending routine "${routine.name}" has not been marked done!`);
+          this.addLog('thought', `⏰ FOLLOW-UP: Pending routine "${routine.name}" has not been marked done!`);
           this.addLog('tool', `Re-evaluating routine checklist items for "${routine.name}"...`);
+
+          // Fire a REAL OS notification with sound
+          fireFollowUpNotification(
+            routine.id,
+            routine.name,
+            routine.followUpIntervalMinutes || 15
+          ).catch((err) => console.warn('[Panya] Follow-up notification failed:', err));
+
           this.notify();
           break;
         }
@@ -281,6 +333,10 @@ class AgentSimulator {
     this.notify();
 
     this.addLog('info', `Starting routine: "${routine.name}"`);
+
+    // Fire a real notification that the routine has started
+    fireFollowUpNotification(routine.id, `${routine.name} – Started`, 0)
+      .catch((err) => console.warn('[Panya] Routine start notification failed:', err));
 
     for (const step of routine.steps) {
       this.addLog('thought', `Next objective: ${step.text}`);
@@ -336,8 +392,18 @@ class AgentSimulator {
       } else {
         this.addLog('info', `Your checklist has ${this.state.todos.filter(t => !t.completed).length} active items.`);
       }
+    } else if (cmd.includes('test alarm') || cmd.includes('test notification')) {
+      this.addLog('tool', `Matching user intent: Test Notification System`);
+      await this.sleep(500);
+      try {
+        const { fireTestNotification } = await import('./notificationService');
+        await fireTestNotification();
+        this.addLog('success', `🔔 Test alarm fired! You should hear a notification sound now.`);
+      } catch (err: any) {
+        this.addLog('error', `Notification test failed: ${err.message}`);
+      }
     } else {
-      this.addLog('error', `Unknown command. Supported command triggers: "order food", "buy groceries", "extract tasks", "create task <desc>".`);
+      this.addLog('error', `Unknown command. Supported: "order food", "buy groceries", "extract tasks", "create task <desc>", "test alarm".`);
     }
 
     this.state.isAgentRunning = false;
@@ -364,6 +430,9 @@ class AgentSimulator {
       this.addLog('success', `Extracted and imported ${extractedCount} new checklist items from your notes!`);
     } else if (action === 'alert_user') {
       this.addLog('success', 'Sending notifications: "Reminder: Plan exercise routine"');
+      // Fire a real OS notification for the alert
+      fireFollowUpNotification('alert', 'Plan exercise routine', 0)
+        .catch((err) => console.warn('[Panya] Alert notification failed:', err));
     } else if (action === 'read_meal_pref') {
       this.addLog('thought', 'Reading note pad preferences...');
       if (this.state.notes.toLowerCase().includes('vegan quinoa salad')) {
@@ -526,6 +595,15 @@ class AgentSimulator {
     this.state.groceryApp.highlightedElement = null;
     this.notify();
     this.addLog('success', 'CartGo grocery delivery confirmed! Delivery scheduled between 6 - 7 PM.');
+  }
+
+  /**
+   * Sync all active routines with the OS notification scheduler.
+   * Call once after app init / notification permissions are granted.
+   */
+  public syncAllAlarms() {
+    syncRoutineAlarms(this.state.routines)
+      .catch((err) => console.warn('[Panya] Failed to sync alarms:', err));
   }
 }
 
