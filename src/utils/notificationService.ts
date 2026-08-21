@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 // ── Channel IDs ─────────────────────────────────────────────────────
 const ROUTINE_CHANNEL_ID = 'panya-routine-alarms';
 const FOLLOW_UP_CHANNEL_ID = 'panya-follow-up-alarms';
+const HOURLY_ALARM_CHANNEL_ID = 'panya-hourly-alarms';
 
 // ── Notification handler (shows banners while app is in foreground) ─
 Notifications.setNotificationHandler({
@@ -49,19 +50,38 @@ export async function initNotifications(): Promise<boolean> {
       enableVibrate: true,
       enableLights: true,
     });
+
+    await Notifications.setNotificationChannelAsync(HOURLY_ALARM_CHANNEL_ID, {
+      name: 'Hourly Log Alarms',
+      description: 'Alerts for unlogged hourly activity blocks',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 300, 200, 300],
+      lightColor: '#F59E0B',
+      sound: 'default',
+      enableVibrate: true,
+      enableLights: true,
+    });
   }
 
-  // 2. Request permission
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  if (Platform.OS === 'web') {
+    return true;
   }
 
-  if (finalStatus !== 'granted') {
-    console.warn('[Panya] Notification permission NOT granted – alarms will be silent.');
+  // 2. Request permission on native iOS/Android
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.warn('[Panya] Notification permission NOT granted – alarms will be silent.');
+      return false;
+    }
+  } catch (e) {
     return false;
   }
 
@@ -82,6 +102,7 @@ export async function scheduleRoutineAlarm(
   timeStr: string, // "HH:MM"
   steps: { text: string }[]
 ): Promise<string> {
+  if (Platform.OS === 'web') return 'web-routine-noop';
   // Cancel any existing notification for this routine first
   await cancelRoutineAlarm(routineId);
 
@@ -130,6 +151,7 @@ export async function fireFollowUpNotification(
   routineName: string,
   intervalMinutes: number
 ): Promise<string> {
+  if (Platform.OS === 'web') return 'web-followup-noop';
   const identifier = await Notifications.scheduleNotificationAsync({
     identifier: `follow-up-${routineId}-${Date.now()}`,
     content: {
@@ -148,6 +170,7 @@ export async function fireFollowUpNotification(
 
 // ── Cancel a scheduled routine alarm ───────────────────────────────
 export async function cancelRoutineAlarm(routineId: string): Promise<void> {
+  if (Platform.OS === 'web') return;
   try {
     await Notifications.cancelScheduledNotificationAsync(`routine-alarm-${routineId}`);
   } catch {
@@ -157,6 +180,7 @@ export async function cancelRoutineAlarm(routineId: string): Promise<void> {
 
 // ── Cancel all Panya notifications ─────────────────────────────────
 export async function cancelAllPanyaNotifications(): Promise<void> {
+  if (Platform.OS === 'web') return;
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
@@ -168,6 +192,7 @@ export async function cancelAllPanyaNotifications(): Promise<void> {
 export async function syncRoutineAlarms(
   routines: { id: string; name: string; time: string; enabled: boolean; completed: boolean; steps: { text: string }[] }[]
 ): Promise<void> {
+  if (Platform.OS === 'web') return;
   // Cancel everything first to avoid duplicates
   await Notifications.cancelAllScheduledNotificationsAsync();
 
@@ -183,6 +208,7 @@ export async function syncRoutineAlarms(
  * Useful for verifying the notification system works.
  */
 export async function fireTestNotification(): Promise<string> {
+  if (Platform.OS === 'web') return 'web-test-noop';
   const identifier = await Notifications.scheduleNotificationAsync({
     content: {
       title: '🧪 Panya Test Alarm',
@@ -196,3 +222,43 @@ export async function fireTestNotification(): Promise<string> {
 
   return identifier;
 }
+
+// ── Fire Hourly Overdue Alarm Notification ─────────────────────────
+/**
+ * Triggers an alarm when 2 or 3+ past hourly blocks are unlogged.
+ */
+export async function fireHourlyOverdueNotification(
+  unfilledCount: number,
+  timeSummary: string,
+  isEscalated: boolean
+): Promise<string> {
+  if (Platform.OS === 'web') {
+    console.log(`[Panya Web] Overdue Alarm: ${unfilledCount} hours unlogged (${timeSummary})`);
+    return 'web-hourly-noop';
+  }
+  const title = isEscalated
+    ? `🚨 ${unfilledCount} Hours Unlogged!`
+    : `⚠️ ${unfilledCount} Hours Unlogged`;
+  const body = isEscalated
+    ? `You have ${unfilledCount} hours pending (${timeSummary}). Repeating reminder every 15 min.`
+    : `Please log what you did for (${timeSummary}).`;
+
+  const identifier = await Notifications.scheduleNotificationAsync({
+    identifier: `hourly-overdue-${Date.now()}`,
+    content: {
+      title,
+      body,
+      data: { type: 'hourly_overdue', unfilledCount, isEscalated },
+      sound: 'default',
+      priority: isEscalated
+        ? Notifications.AndroidNotificationPriority.MAX
+        : Notifications.AndroidNotificationPriority.HIGH,
+      ...(Platform.OS === 'android' ? { channelId: HOURLY_ALARM_CHANNEL_ID } : {}),
+    },
+    trigger: null, // fire immediately
+  });
+
+  console.log(`[Panya] Fired hourly overdue alarm (count: ${unfilledCount}, escalated: ${isEscalated})`);
+  return identifier;
+}
+

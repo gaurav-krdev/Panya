@@ -27,11 +27,12 @@ export default function HomeScreen() {
 
   };
 
-  // Clock Update Interval & Routine Follow-Up Engine Check
+  // Clock Update Interval & Routine / Hourly Follow-Up Engine Check
   useEffect(() => {
     const timer = setInterval(() => {
       setTime(new Date());
       agentEngine.checkRoutineFollowUps();
+      agentEngine.checkHourlyBlockAlarms();
     }, 1000);
     return () => clearInterval(timer);
   }, []);

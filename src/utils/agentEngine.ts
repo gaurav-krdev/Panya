@@ -4,6 +4,7 @@ import {
   scheduleRoutineAlarm,
   cancelRoutineAlarm,
   syncRoutineAlarms,
+  fireHourlyOverdueNotification,
 } from './notificationService';
 
 export interface AgentLog {
@@ -24,6 +25,37 @@ export interface Routine {
   steps: { text: string; action: string }[];
 }
 
+export interface HourlyLog {
+  id: string;
+  date: string; // "YYYY-MM-DD"
+  startHour: number; // 6 = 6:00 AM (0-23)
+  endHour: number; // 7 = 7:00 AM (1-24)
+  activity: string;
+  durationMinutes?: number;
+  category: 'work' | 'meeting' | 'study' | 'routine' | 'break' | 'personal';
+  loggedAt: number;
+}
+
+export interface HourlySlot {
+  startHour: number;
+  endHour: number;
+  label: string;
+  formattedStart: string;
+  formattedEnd: string;
+}
+
+export function formatHourNumber(hour: number): string {
+  const normalized = hour % 24;
+  const period = normalized >= 12 ? 'PM' : 'AM';
+  let displayHour = normalized % 12;
+  if (displayHour === 0) displayHour = 12;
+  return `${displayHour.toString().padStart(2, '0')}:00 ${period}`;
+}
+
+export function formatHourRange(startHour: number, endHour: number): string {
+  return `${formatHourNumber(startHour)} – ${formatHourNumber(endHour)}`;
+}
+
 export interface AppState {
   currentTab: 'home' | 'notes' | 'console' | 'sandbox';
   isAgentRunning: boolean;
@@ -31,6 +63,11 @@ export interface AppState {
   routines: Routine[];
   todos: { id: string; text: string; completed: boolean }[];
   notes: string;
+  // Hourly Block Ledger State
+  hourlyLogs: HourlyLog[];
+  dayStartHour: number; // default 6 = 06:00 AM
+  unloggedAlarmLastFiredTimestamp?: number;
+  unloggedAlarmLevel: number; // 0, 1, 2, 3
   // Simulated Food App State
   foodApp: {
     restaurant: string;
@@ -114,6 +151,111 @@ class AgentSimulator {
         { id: 'todo-3', text: 'Set review alarm for 9 PM', completed: true },
       ],
       notes: `- Grocery List:\n  * Organic Milk\n  * Free-Range Eggs\n  * Fresh Spinach\n- Lunch preference: Vegan Quinoa Salad\n- Team standup at 3:00 PM today.`,
+      // Hourly Block Ledger State
+      hourlyLogs: [
+        {
+          id: 'log-1',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 6,
+          endHour: 7,
+          activity: 'working on sync - five min meditation',
+          durationMinutes: 20,
+          category: 'routine',
+          loggedAt: Date.now() - 15 * 3600 * 1000,
+        },
+        {
+          id: 'log-2',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 7,
+          endHour: 8,
+          activity: 'ready',
+          durationMinutes: 30,
+          category: 'routine',
+          loggedAt: Date.now() - 14 * 3600 * 1000,
+        },
+        {
+          id: 'log-3',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 8,
+          endHour: 9,
+          activity: 'Cassandra',
+          durationMinutes: 25,
+          category: 'study',
+          loggedAt: Date.now() - 13 * 3600 * 1000,
+        },
+        {
+          id: 'log-4',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 9,
+          endHour: 10,
+          activity: 'meet',
+          durationMinutes: 10,
+          category: 'meeting',
+          loggedAt: Date.now() - 12 * 3600 * 1000,
+        },
+        {
+          id: 'log-5',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 10,
+          endHour: 11,
+          activity: 'PR Review',
+          durationMinutes: 30,
+          category: 'work',
+          loggedAt: Date.now() - 11 * 3600 * 1000,
+        },
+        {
+          id: 'log-6',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 11,
+          endHour: 12,
+          activity: 'scrum',
+          durationMinutes: 30,
+          category: 'meeting',
+          loggedAt: Date.now() - 10 * 3600 * 1000,
+        },
+        {
+          id: 'log-7',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 12,
+          endHour: 13,
+          activity: 'Created PR',
+          durationMinutes: 20,
+          category: 'work',
+          loggedAt: Date.now() - 9 * 3600 * 1000,
+        },
+        {
+          id: 'log-8',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 13,
+          endHour: 14,
+          activity: 'walk',
+          durationMinutes: 30,
+          category: 'break',
+          loggedAt: Date.now() - 8 * 3600 * 1000,
+        },
+        {
+          id: 'log-9',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 14,
+          endHour: 15,
+          activity: 'add ref of Perf kitt in par kitt',
+          durationMinutes: 20,
+          category: 'work',
+          loggedAt: Date.now() - 7 * 3600 * 1000,
+        },
+        {
+          id: 'log-10',
+          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          startHour: 15,
+          endHour: 19,
+          activity: 'kitt cluster change to approved list',
+          durationMinutes: 240,
+          category: 'work',
+          loggedAt: Date.now() - 3 * 3600 * 1000,
+        },
+      ],
+      dayStartHour: 6,
+      unloggedAlarmLevel: 0,
       foodApp: {
         restaurant: 'GreenLeaf Salads & Bowls',
         items: [
@@ -147,6 +289,7 @@ class AgentSimulator {
       routines: [...this.state.routines],
       todos: [...this.state.todos],
       agentLogs: [...this.state.agentLogs],
+      hourlyLogs: [...this.state.hourlyLogs],
     };
   }
 
@@ -319,6 +462,150 @@ class AgentSimulator {
       completed: false,
     });
     this.notify();
+  }
+
+  // ── Hourly Block Ledger Methods ────────────────────────────────────
+
+  public getTodayDateString(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+  }
+
+  public getTodayLogs(): HourlyLog[] {
+    const today = this.getTodayDateString();
+    return this.state.hourlyLogs
+      .filter((l) => l.date === today)
+      .sort((a, b) => a.startHour - b.startHour);
+  }
+
+  public getUnloggedHourlySlots(currentDate: Date = new Date()): HourlySlot[] {
+    const currentHour = currentDate.getHours();
+    const startHour = this.state.dayStartHour;
+    const todayLogs = this.getTodayLogs();
+
+    const slots: HourlySlot[] = [];
+
+    // Derive all elapsed hours of the current day that are not yet filled
+    for (let h = startHour; h < currentHour; h++) {
+      const isCovered = todayLogs.some((l) => l.startHour <= h && h < l.endHour);
+      if (!isCovered) {
+        slots.push({
+          startHour: h,
+          endHour: h + 1,
+          label: formatHourRange(h, h + 1),
+          formattedStart: formatHourNumber(h),
+          formattedEnd: formatHourNumber(h + 1),
+        });
+      }
+    }
+
+    return slots;
+  }
+
+  public logHourlyBlock(
+    startHour: number,
+    endHour: number,
+    activity: string,
+    durationMinutes: number = 60,
+    category: HourlyLog['category'] = 'work'
+  ) {
+    if (!activity.trim()) return;
+    const today = this.getTodayDateString();
+    const newLog: HourlyLog = {
+      id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      date: today,
+      startHour,
+      endHour,
+      activity: activity.trim(),
+      durationMinutes,
+      category,
+      loggedAt: Date.now(),
+    };
+
+    // Remove any overlapping partial logs if this is a merged block
+    this.state.hourlyLogs = this.state.hourlyLogs.filter((l) => {
+      if (l.date !== today) return true;
+      const overlaps = Math.max(l.startHour, startHour) < Math.min(l.endHour, endHour);
+      return !overlaps;
+    });
+
+    this.state.hourlyLogs.push(newLog);
+    this.state.hourlyLogs.sort((a, b) => a.startHour - b.startHour);
+
+    this.addLog(
+      'success',
+      `Logged [${formatHourRange(startHour, endHour)}]: "${newLog.activity}" (${durationMinutes}m)`
+    );
+
+    // Re-check alarms immediately
+    this.checkHourlyBlockAlarms();
+    this.notify();
+  }
+
+  public quickLogBreak(startHour: number, endHour: number, reason: string = 'Break / Personal') {
+    this.logHourlyBlock(startHour, endHour, reason, (endHour - startHour) * 60, 'break');
+  }
+
+  public deleteHourlyLog(id: string) {
+    const target = this.state.hourlyLogs.find((l) => l.id === id);
+    this.state.hourlyLogs = this.state.hourlyLogs.filter((l) => l.id !== id);
+    if (target) {
+      this.addLog('info', `Deleted log for ${formatHourRange(target.startHour, target.endHour)}.`);
+    }
+    this.checkHourlyBlockAlarms();
+    this.notify();
+  }
+
+  public updateHourlyLog(id: string, updates: Partial<HourlyLog>) {
+    this.state.hourlyLogs = this.state.hourlyLogs.map((l) =>
+      l.id === id ? { ...l, ...updates } : l
+    );
+    this.notify();
+  }
+
+  public setDayStartHour(hour: number) {
+    this.state.dayStartHour = hour;
+    this.notify();
+  }
+
+  public checkHourlyBlockAlarms() {
+    const unloggedSlots = this.getUnloggedHourlySlots();
+    const count = unloggedSlots.length;
+    const now = Date.now();
+
+    if (count < 2) {
+      this.state.unloggedAlarmLevel = count;
+      return;
+    }
+
+    const timeSummary = unloggedSlots.map((s) => s.label).join(', ');
+
+    if (count === 2) {
+      // 2 Empty Blocks: One-time alarm
+      if (this.state.unloggedAlarmLevel !== 2) {
+        this.state.unloggedAlarmLevel = 2;
+        this.state.unloggedAlarmLastFiredTimestamp = now;
+
+        this.addLog('thought', `⚠️ 2 Unlogged Hourly Blocks detected: ${timeSummary}. Firing reminder.`);
+        fireHourlyOverdueNotification(count, timeSummary, false)
+          .catch((err) => console.warn('[Panya] Hourly notification error:', err));
+        this.notify();
+      }
+    } else if (count >= 3) {
+      // 3+ Empty Blocks: Repeating alarm every 15 minutes
+      this.state.unloggedAlarmLevel = 3;
+      const intervalMs = 15 * 60 * 1000;
+      const lastFired = this.state.unloggedAlarmLastFiredTimestamp || 0;
+
+      if (now - lastFired >= intervalMs || lastFired === 0) {
+        this.state.unloggedAlarmLastFiredTimestamp = now;
+
+        this.addLog('thought', `🚨 ESCALATION: ${count} Unlogged Blocks (${timeSummary})! Repeating alarm active.`);
+        fireHourlyOverdueNotification(count, timeSummary, true)
+          .catch((err) => console.warn('[Panya] Escalated hourly notification error:', err));
+        this.notify();
+      }
+    }
   }
 
   // --- Agent Core Actions ---
