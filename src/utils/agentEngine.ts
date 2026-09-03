@@ -5,6 +5,7 @@ import {
   cancelRoutineAlarm,
   syncRoutineAlarms,
   fireHourlyOverdueNotification,
+  scheduleHourlyDaytimeCheckIns,
 } from './notificationService';
 
 export interface AgentLog {
@@ -87,6 +88,16 @@ export interface AppState {
   };
 }
 
+function getTodayString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+}
+
+function getYesterdayString(): string {
+  const d = new Date(Date.now() - 24 * 3600 * 1000);
+  return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+}
+
 class AgentSimulator {
   private state: AppState;
   private listeners: (() => void)[] = [];
@@ -151,107 +162,107 @@ class AgentSimulator {
         { id: 'todo-3', text: 'Set review alarm for 9 PM', completed: true },
       ],
       notes: `- Grocery List:\n  * Organic Milk\n  * Free-Range Eggs\n  * Fresh Spinach\n- Lunch preference: Vegan Quinoa Salad\n- Team standup at 3:00 PM today.`,
-      // Hourly Block Ledger State
+      // Hourly Block Ledger State (sample history initialized with yesterday's actual date)
       hourlyLogs: [
         {
           id: 'log-1',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 6,
           endHour: 7,
           activity: 'working on sync - five min meditation',
           durationMinutes: 20,
           category: 'routine',
-          loggedAt: Date.now() - 15 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 6 * 3600 * 1000,
         },
         {
           id: 'log-2',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 7,
           endHour: 8,
           activity: 'ready',
           durationMinutes: 30,
           category: 'routine',
-          loggedAt: Date.now() - 14 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 7 * 3600 * 1000,
         },
         {
           id: 'log-3',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 8,
           endHour: 9,
           activity: 'Cassandra',
           durationMinutes: 25,
           category: 'study',
-          loggedAt: Date.now() - 13 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 8 * 3600 * 1000,
         },
         {
           id: 'log-4',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 9,
           endHour: 10,
           activity: 'meet',
           durationMinutes: 10,
           category: 'meeting',
-          loggedAt: Date.now() - 12 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 9 * 3600 * 1000,
         },
         {
           id: 'log-5',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 10,
           endHour: 11,
           activity: 'PR Review',
           durationMinutes: 30,
           category: 'work',
-          loggedAt: Date.now() - 11 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 10 * 3600 * 1000,
         },
         {
           id: 'log-6',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 11,
           endHour: 12,
           activity: 'scrum',
           durationMinutes: 30,
           category: 'meeting',
-          loggedAt: Date.now() - 10 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 11 * 3600 * 1000,
         },
         {
           id: 'log-7',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 12,
           endHour: 13,
           activity: 'Created PR',
           durationMinutes: 20,
           category: 'work',
-          loggedAt: Date.now() - 9 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 12 * 3600 * 1000,
         },
         {
           id: 'log-8',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 13,
           endHour: 14,
           activity: 'walk',
           durationMinutes: 30,
           category: 'break',
-          loggedAt: Date.now() - 8 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 13 * 3600 * 1000,
         },
         {
           id: 'log-9',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 14,
           endHour: 15,
           activity: 'add ref of Perf kitt in par kitt',
           durationMinutes: 20,
           category: 'work',
-          loggedAt: Date.now() - 7 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 14 * 3600 * 1000,
         },
         {
           id: 'log-10',
-          date: `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}-${new Date().getDate().toString().padStart(2, '0')}`,
+          date: getYesterdayString(),
           startHour: 15,
           endHour: 19,
           activity: 'kitt cluster change to approved list',
           durationMinutes: 240,
           category: 'work',
-          loggedAt: Date.now() - 3 * 3600 * 1000,
+          loggedAt: Date.now() - 24 * 3600 * 1000 + 15 * 3600 * 1000,
         },
       ],
       dayStartHour: 6,
@@ -467,27 +478,50 @@ class AgentSimulator {
   // ── Hourly Block Ledger Methods ────────────────────────────────────
 
   public getTodayDateString(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+    return getTodayString();
   }
 
-  public getTodayLogs(): HourlyLog[] {
-    const today = this.getTodayDateString();
+  public getYesterdayDateString(): string {
+    return getYesterdayString();
+  }
+
+  public getLogsForDate(dateStr: string): HourlyLog[] {
     return this.state.hourlyLogs
-      .filter((l) => l.date === today)
+      .filter((l) => l.date === dateStr)
       .sort((a, b) => a.startHour - b.startHour);
   }
 
-  public getUnloggedHourlySlots(currentDate: Date = new Date()): HourlySlot[] {
+  public getTodayLogs(): HourlyLog[] {
+    return this.getLogsForDate(this.getTodayDateString());
+  }
+
+  public getAvailableDates(): string[] {
+    const dates = new Set<string>();
+    dates.add(this.getTodayDateString());
+    dates.add(this.getYesterdayDateString());
+    this.state.hourlyLogs.forEach((l) => {
+      if (l.date) dates.add(l.date);
+    });
+    return Array.from(dates).sort((a, b) => b.localeCompare(a));
+  }
+
+  public getUnloggedHourlySlots(currentDate: Date = new Date(), targetDateStr?: string): HourlySlot[] {
+    const today = this.getTodayDateString();
+    const queryDate = targetDateStr || today;
+    const isToday = queryDate === today;
+
     const currentHour = currentDate.getHours();
     const startHour = this.state.dayStartHour;
-    const todayLogs = this.getTodayLogs();
+    const logsForDate = this.getLogsForDate(queryDate);
+
+    // If queryDate is today, only show elapsed hours up to current hour.
+    // If queryDate is a past day (e.g. yesterday), derive all hours from startHour up to 23:00
+    const maxHour = isToday ? currentHour : 23;
 
     const slots: HourlySlot[] = [];
 
-    // Derive all elapsed hours of the current day that are not yet filled
-    for (let h = startHour; h < currentHour; h++) {
-      const isCovered = todayLogs.some((l) => l.startHour <= h && h < l.endHour);
+    for (let h = startHour; h < maxHour; h++) {
+      const isCovered = logsForDate.some((l) => l.startHour <= h && h < l.endHour);
       if (!isCovered) {
         slots.push({
           startHour: h,
@@ -507,13 +541,14 @@ class AgentSimulator {
     endHour: number,
     activity: string,
     durationMinutes: number = 60,
-    category: HourlyLog['category'] = 'work'
+    category: HourlyLog['category'] = 'work',
+    targetDateStr?: string
   ) {
     if (!activity.trim()) return;
-    const today = this.getTodayDateString();
+    const logDate = targetDateStr || this.getTodayDateString();
     const newLog: HourlyLog = {
       id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-      date: today,
+      date: logDate,
       startHour,
       endHour,
       activity: activity.trim(),
@@ -522,9 +557,9 @@ class AgentSimulator {
       loggedAt: Date.now(),
     };
 
-    // Remove any overlapping partial logs if this is a merged block
+    // Remove any overlapping partial logs if this is a merged block for this date
     this.state.hourlyLogs = this.state.hourlyLogs.filter((l) => {
-      if (l.date !== today) return true;
+      if (l.date !== logDate) return true;
       const overlaps = Math.max(l.startHour, startHour) < Math.min(l.endHour, endHour);
       return !overlaps;
     });
@@ -534,16 +569,23 @@ class AgentSimulator {
 
     this.addLog(
       'success',
-      `Logged [${formatHourRange(startHour, endHour)}]: "${newLog.activity}" (${durationMinutes}m)`
+      `Logged [${formatHourRange(startHour, endHour)} on ${logDate}]: "${newLog.activity}" (${durationMinutes}m)`
     );
 
-    // Re-check alarms immediately
-    this.checkHourlyBlockAlarms();
+    // Re-check alarms if today
+    if (logDate === this.getTodayDateString()) {
+      this.checkHourlyBlockAlarms();
+    }
     this.notify();
   }
 
-  public quickLogBreak(startHour: number, endHour: number, reason: string = 'Break / Personal') {
-    this.logHourlyBlock(startHour, endHour, reason, (endHour - startHour) * 60, 'break');
+  public quickLogBreak(
+    startHour: number,
+    endHour: number,
+    reason: string = 'Break / Personal',
+    targetDateStr?: string
+  ) {
+    this.logHourlyBlock(startHour, endHour, reason, (endHour - startHour) * 60, 'break', targetDateStr);
   }
 
   public deleteHourlyLog(id: string) {
@@ -573,35 +615,48 @@ class AgentSimulator {
     const count = unloggedSlots.length;
     const now = Date.now();
 
-    if (count < 2) {
-      this.state.unloggedAlarmLevel = count;
+    if (count === 0) {
+      this.state.unloggedAlarmLevel = 0;
+      this.state.unloggedAlarmLastFiredTimestamp = undefined;
       return;
     }
 
     const timeSummary = unloggedSlots.map((s) => s.label).join(', ');
 
-    if (count === 2) {
-      // 2 Empty Blocks: One-time alarm
+    if (count === 1) {
+      // 1 Unlogged Block: Gentle hourly check-in reminder
+      if (this.state.unloggedAlarmLevel !== 1) {
+        this.state.unloggedAlarmLevel = 1;
+        this.state.unloggedAlarmLastFiredTimestamp = now;
+
+        this.addLog('thought', `📝 1 Unlogged Hourly Block (${timeSummary}). Firing gentle reminder.`);
+        fireHourlyOverdueNotification(count, timeSummary, 1)
+          .catch((err) => console.warn('[Panya] Hourly reminder error:', err));
+        this.notify();
+      }
+    } else if (count === 2) {
+      // 2 Unlogged Blocks: One-time alarm alert
       if (this.state.unloggedAlarmLevel !== 2) {
         this.state.unloggedAlarmLevel = 2;
         this.state.unloggedAlarmLastFiredTimestamp = now;
 
-        this.addLog('thought', `⚠️ 2 Unlogged Hourly Blocks detected: ${timeSummary}. Firing reminder.`);
-        fireHourlyOverdueNotification(count, timeSummary, false)
-          .catch((err) => console.warn('[Panya] Hourly notification error:', err));
+        this.addLog('thought', `⚠️ 2 Unlogged Hourly Blocks detected: ${timeSummary}. Firing alarm.`);
+        fireHourlyOverdueNotification(count, timeSummary, 2)
+          .catch((err) => console.warn('[Panya] 2-Hour alarm error:', err));
         this.notify();
       }
     } else if (count >= 3) {
-      // 3+ Empty Blocks: Repeating alarm every 15 minutes
-      this.state.unloggedAlarmLevel = 3;
+      // 3+ Unlogged Blocks: Repeating alarm every 15 minutes
       const intervalMs = 15 * 60 * 1000;
       const lastFired = this.state.unloggedAlarmLastFiredTimestamp || 0;
+      const shouldFire = this.state.unloggedAlarmLevel !== 3 || (now - lastFired >= intervalMs);
 
-      if (now - lastFired >= intervalMs || lastFired === 0) {
+      if (shouldFire) {
+        this.state.unloggedAlarmLevel = 3;
         this.state.unloggedAlarmLastFiredTimestamp = now;
 
         this.addLog('thought', `🚨 ESCALATION: ${count} Unlogged Blocks (${timeSummary})! Repeating alarm active.`);
-        fireHourlyOverdueNotification(count, timeSummary, true)
+        fireHourlyOverdueNotification(count, timeSummary, 3)
           .catch((err) => console.warn('[Panya] Escalated hourly notification error:', err));
         this.notify();
       }
@@ -890,7 +945,9 @@ class AgentSimulator {
    */
   public syncAllAlarms() {
     syncRoutineAlarms(this.state.routines)
-      .catch((err) => console.warn('[Panya] Failed to sync alarms:', err));
+      .catch((err) => console.warn('[Panya] Failed to sync routine alarms:', err));
+    scheduleHourlyDaytimeCheckIns(this.state.dayStartHour)
+      .catch((err) => console.warn('[Panya] Failed to sync hourly triggers:', err));
   }
 }
 

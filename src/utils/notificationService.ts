@@ -225,40 +225,86 @@ export async function fireTestNotification(): Promise<string> {
 
 // ── Fire Hourly Overdue Alarm Notification ─────────────────────────
 /**
- * Triggers an alarm when 2 or 3+ past hourly blocks are unlogged.
+ * Triggers notification based on escalation tier:
+ * Level 1 (1 unlogged hour): Friendly hourly reminder
+ * Level 2 (2 unlogged hours): High-priority one-time alarm
+ * Level 3 (3+ unlogged hours): Max-priority escalating repeating alarm (every 15 min)
  */
 export async function fireHourlyOverdueNotification(
   unfilledCount: number,
   timeSummary: string,
-  isEscalated: boolean
+  level: 1 | 2 | 3
 ): Promise<string> {
   if (Platform.OS === 'web') {
-    console.log(`[Panya Web] Overdue Alarm: ${unfilledCount} hours unlogged (${timeSummary})`);
+    console.log(`[Panya Web] Hourly Notification (Level ${level}): ${unfilledCount} hours unlogged (${timeSummary})`);
     return 'web-hourly-noop';
   }
-  const title = isEscalated
-    ? `🚨 ${unfilledCount} Hours Unlogged!`
-    : `⚠️ ${unfilledCount} Hours Unlogged`;
-  const body = isEscalated
-    ? `You have ${unfilledCount} hours pending (${timeSummary}). Repeating reminder every 15 min.`
-    : `Please log what you did for (${timeSummary}).`;
+
+  let title: string;
+  let body: string;
+  let priority = Notifications.AndroidNotificationPriority.HIGH;
+
+  if (level === 1) {
+    title = `📝 Hourly Log Reminder (${timeSummary})`;
+    body = `Time to log your activity for ${timeSummary}. Tap to log in Panya.`;
+    priority = Notifications.AndroidNotificationPriority.DEFAULT;
+  } else if (level === 2) {
+    title = `⚠️ 2 Hours Unlogged!`;
+    body = `You have 2 pending blocks (${timeSummary}). Please log your past hours.`;
+    priority = Notifications.AndroidNotificationPriority.HIGH;
+  } else {
+    title = `🚨 ESCALATION: ${unfilledCount} Hours Unlogged!`;
+    body = `Urgent: ${unfilledCount} hours pending (${timeSummary}). Repeating reminder every 15 min until logged.`;
+    priority = Notifications.AndroidNotificationPriority.MAX;
+  }
 
   const identifier = await Notifications.scheduleNotificationAsync({
     identifier: `hourly-overdue-${Date.now()}`,
     content: {
       title,
       body,
-      data: { type: 'hourly_overdue', unfilledCount, isEscalated },
+      data: { type: 'hourly_overdue', unfilledCount, level },
       sound: 'default',
-      priority: isEscalated
-        ? Notifications.AndroidNotificationPriority.MAX
-        : Notifications.AndroidNotificationPriority.HIGH,
+      priority,
       ...(Platform.OS === 'android' ? { channelId: HOURLY_ALARM_CHANNEL_ID } : {}),
     },
     trigger: null, // fire immediately
   });
 
-  console.log(`[Panya] Fired hourly overdue alarm (count: ${unfilledCount}, escalated: ${isEscalated})`);
+  console.log(`[Panya] Fired hourly notification (count: ${unfilledCount}, level: ${level})`);
   return identifier;
 }
+
+// ── Schedule Daytime Hourly Check-in Triggers ──────────────────────
+/**
+ * Schedules daily OS-level notifications for each daytime hour (from startHour to 22:00)
+ * so Android alerts the user even if the app is closed/backgrounded.
+ */
+export async function scheduleHourlyDaytimeCheckIns(startHour: number = 6): Promise<void> {
+  if (Platform.OS === 'web') return;
+
+  for (let h = startHour; h <= 22; h++) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `hourly-slot-trigger-${h}`,
+        content: {
+          title: `📝 Hourly Log Check-in`,
+          body: `Hour finished. Tap to log your past hour in Panya!`,
+          data: { type: 'hourly_scheduled_checkin', hour: h },
+          sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          ...(Platform.OS === 'android' ? { channelId: HOURLY_ALARM_CHANNEL_ID } : {}),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: h,
+          minute: 0,
+        },
+      });
+    } catch (e) {
+      console.warn(`[Panya] Failed to schedule hourly trigger for hour ${h}:`, e);
+    }
+  }
+}
+
 

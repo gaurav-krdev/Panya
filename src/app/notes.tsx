@@ -42,6 +42,11 @@ export default function NotesScreen() {
   const theme = useTheme();
   const agentState = useAgentState();
 
+  const todayStr = agentEngine.getTodayDateString();
+  const yesterdayStr = agentEngine.getYesterdayDateString();
+  const availableDates = agentEngine.getAvailableDates();
+
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [unloggedSlots, setUnloggedSlots] = useState<HourlySlot[]>([]);
   
@@ -64,13 +69,13 @@ export default function NotesScreen() {
     const updateSlots = () => {
       const now = new Date();
       setCurrentTime(now);
-      setUnloggedSlots(agentEngine.getUnloggedHourlySlots(now));
+      setUnloggedSlots(agentEngine.getUnloggedHourlySlots(now, selectedDate));
     };
 
     updateSlots();
     const timer = setInterval(updateSlots, 1000);
     return () => clearInterval(timer);
-  }, [agentState.hourlyLogs, agentState.dayStartHour]);
+  }, [agentState.hourlyLogs, agentState.dayStartHour, selectedDate]);
 
   const handleNotesChange = (text: string) => {
     agentEngine.setNotes(text);
@@ -108,7 +113,7 @@ export default function NotesScreen() {
     if (!activity) return;
 
     const duration = parseInt(input.duration, 10) || 60;
-    agentEngine.logHourlyBlock(slot.startHour, slot.endHour, activity, duration, input.category);
+    agentEngine.logHourlyBlock(slot.startHour, slot.endHour, activity, duration, input.category, selectedDate);
 
     // Clear local input for this slot
     setSlotInputs((prev) => {
@@ -119,7 +124,7 @@ export default function NotesScreen() {
   };
 
   const handleQuickBreak = (slot: HourlySlot) => {
-    agentEngine.quickLogBreak(slot.startHour, slot.endHour, 'Break / Personal Time');
+    agentEngine.quickLogBreak(slot.startHour, slot.endHour, 'Break / Personal Time', selectedDate);
   };
 
   const handleSaveMergedBlock = () => {
@@ -129,7 +134,7 @@ export default function NotesScreen() {
     if (isNaN(start) || isNaN(end) || start >= end || !activity) return;
 
     const duration = parseInt(mergeDuration, 10) || (end - start) * 60;
-    agentEngine.logHourlyBlock(start, end, activity, duration, mergeCategory);
+    agentEngine.logHourlyBlock(start, end, activity, duration, mergeCategory, selectedDate);
 
     setMergeModalVisible(false);
     setMergeActivity('');
@@ -139,11 +144,14 @@ export default function NotesScreen() {
     agentEngine.deleteHourlyLog(id);
   };
 
-  // Aggregated Stats for Today
-  const todayLogs = agentEngine.getTodayLogs();
-  const totalMinutesLogged = todayLogs.reduce((acc, log) => acc + (log.durationMinutes || (log.endHour - log.startHour) * 60), 0);
+  // Aggregated Stats for Currently Selected Date
+  const displayedLogs = agentEngine.getLogsForDate(selectedDate);
+  const totalMinutesLogged = displayedLogs.reduce((acc, log) => acc + (log.durationMinutes || (log.endHour - log.startHour) * 60), 0);
   const totalHours = Math.floor(totalMinutesLogged / 60);
   const totalMins = totalMinutesLogged % 60;
+
+  const isToday = selectedDate === todayStr;
+  const isYesterday = selectedDate === yesterdayStr;
 
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 640;
@@ -161,24 +169,29 @@ export default function NotesScreen() {
     },
   });
 
-  // Alarm Status Helper
+  // Alarm Status Helper (only active for today)
   const unloggedCount = unloggedSlots.length;
-  let alarmBadgeColor = theme.accent;
-  let alarmBadgeText = '✓ All Caught Up';
-  let alarmBadgeBg = theme.accent + '18';
+  let alarmBadgeColor: string = theme.accent;
+  let alarmBadgeText = isToday ? '✓ All Caught Up' : `🗓️ Viewing ${isYesterday ? 'Yesterday' : selectedDate}`;
+  let alarmBadgeBg: string = theme.accent + '18';
 
-  if (unloggedCount === 1) {
-    alarmBadgeColor = '#F59E0B';
-    alarmBadgeText = '⏳ 1 Hour Pending';
-    alarmBadgeBg = '#F59E0B18';
-  } else if (unloggedCount === 2) {
-    alarmBadgeColor = '#EA580C';
-    alarmBadgeText = '⚠️ 2 Hours Overdue (Alarm Sent)';
-    alarmBadgeBg = '#EA580C22';
-  } else if (unloggedCount >= 3) {
-    alarmBadgeColor = '#EF4444';
-    alarmBadgeText = `🚨 ${unloggedCount} Hours Overdue (15m Alarm Repeating)`;
-    alarmBadgeBg = '#EF444426';
+  if (isToday) {
+    if (unloggedCount === 1) {
+      alarmBadgeColor = '#F59E0B';
+      alarmBadgeText = '⏳ 1 Hour Pending';
+      alarmBadgeBg = '#F59E0B18';
+    } else if (unloggedCount === 2) {
+      alarmBadgeColor = '#EA580C';
+      alarmBadgeText = '⚠️ 2 Hours Overdue (Alarm Sent)';
+      alarmBadgeBg = '#EA580C22';
+    } else if (unloggedCount >= 3) {
+      alarmBadgeColor = '#EF4444';
+      alarmBadgeText = `🚨 ${unloggedCount} Hours Overdue (15m Alarm Repeating)`;
+      alarmBadgeBg = '#EF444426';
+    }
+  } else {
+    alarmBadgeColor = theme.secondary;
+    alarmBadgeBg = theme.secondary + '18';
   }
 
   return (
@@ -203,15 +216,67 @@ export default function NotesScreen() {
             <Text style={[styles.statusBadgeText, { color: alarmBadgeColor }]}>{alarmBadgeText}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── DATE NAVIGATION SWITCHER ── */}
+        <View style={styles.dateSwitcherContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateSwitcherScroll}>
+            <TouchableOpacity
+              style={[
+                styles.dateTab,
+                { borderColor: isToday ? theme.primary : theme.border },
+                isToday && { backgroundColor: theme.primary + '20' },
+              ]}
+              onPress={() => setSelectedDate(todayStr)}
+            >
+              <Text style={[styles.dateTabText, { color: isToday ? theme.primary : theme.textSecondary, fontWeight: isToday ? '700' : '500' }]}>
+                📅 Today ({todayStr})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.dateTab,
+                { borderColor: isYesterday ? theme.primary : theme.border },
+                isYesterday && { backgroundColor: theme.primary + '20' },
+              ]}
+              onPress={() => setSelectedDate(yesterdayStr)}
+            >
+              <Text style={[styles.dateTabText, { color: isYesterday ? theme.primary : theme.textSecondary, fontWeight: isYesterday ? '700' : '500' }]}>
+                ⏮️ Yesterday ({yesterdayStr})
+              </Text>
+            </TouchableOpacity>
+
+            {availableDates
+              .filter((d) => d !== todayStr && d !== yesterdayStr)
+              .map((d) => {
+                const isSelected = selectedDate === d;
+                return (
+                  <TouchableOpacity
+                    key={d}
+                    style={[
+                      styles.dateTab,
+                      { borderColor: isSelected ? theme.primary : theme.border },
+                      isSelected && { backgroundColor: theme.primary + '20' },
+                    ]}
+                    onPress={() => setSelectedDate(d)}
+                  >
+                    <Text style={[styles.dateTabText, { color: isSelected ? theme.primary : theme.textSecondary, fontWeight: isSelected ? '700' : '500' }]}>
+                      🗓️ {d}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+          </ScrollView>
+        </View>
       </View>
 
       {/* ── 1. UNLOGGED HOURLY BLOCKS (TOP ACTIVE SECTION) ── */}
       <ThemedView type="backgroundElement" style={[styles.card, { borderColor: theme.border }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
-            <SymbolView tintColor={unloggedCount >= 2 ? '#EF4444' : theme.primary} name={{ ios: 'clock.badge.exclamationmark', android: 'schedule', web: 'schedule' }} size={18} />
+            <SymbolView tintColor={isToday && unloggedCount >= 2 ? '#EF4444' : theme.primary} name={{ ios: 'clock.badge.exclamationmark', android: 'schedule', web: 'schedule' }} size={18} />
             <ThemedText type="smallBold" style={styles.cardTitle}>
-              UNLOGGED HOURLY BLOCKS ({unloggedCount})
+              UNLOGGED BLOCKS ({unloggedCount}) — {isToday ? 'TODAY' : isYesterday ? 'YESTERDAY' : selectedDate}
             </ThemedText>
           </View>
           <TouchableOpacity
@@ -225,11 +290,13 @@ export default function NotesScreen() {
         {unloggedCount === 0 ? (
           <View style={[styles.allCaughtUpBox, { borderColor: theme.accent + '44', backgroundColor: theme.accent + '0D' }]}>
             <ThemedText type="smallBold" style={{ color: theme.accent }}>
-              🎉 You are completely up to date!
+              🎉 You are completely up to date for {isToday ? 'today' : isYesterday ? 'yesterday' : selectedDate}!
             </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center', marginTop: Spacing.half }}>
-              The next hourly block ({formatHourRange(currentTime.getHours(), currentTime.getHours() + 1)}) will appear here once elapsed.
-            </ThemedText>
+            {isToday && (
+              <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center', marginTop: Spacing.half }}>
+                The next hourly block ({formatHourRange(currentTime.getHours(), currentTime.getHours() + 1)}) will appear here once elapsed.
+              </ThemedText>
+            )}
           </View>
         ) : (
           <View style={styles.unloggedList}>
@@ -322,13 +389,13 @@ export default function NotesScreen() {
         )}
       </ThemedView>
 
-      {/* ── 2. TODAY'S HOURLY LOG SHEET (BOTTOM TIMELINE) ── */}
+      {/* ── 2. HOURLY LOG SHEET (TIMELINE) ── */}
       <ThemedView type="backgroundElement" style={[styles.card, { borderColor: theme.border }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
             <SymbolView tintColor={theme.secondary} name={{ ios: 'list.clipboard', android: 'assignment', web: 'assignment' }} size={18} />
             <ThemedText type="smallBold" style={styles.cardTitle}>
-              TODAY'S LOG SHEET ({todayLogs.length})
+              {isToday ? "TODAY'S" : isYesterday ? "YESTERDAY'S" : selectedDate} LOG SHEET ({displayedLogs.length})
             </ThemedText>
           </View>
           <ThemedText type="small" themeColor="textSecondary">
@@ -337,7 +404,7 @@ export default function NotesScreen() {
         </View>
 
         <View style={styles.logSheetList}>
-          {todayLogs.map((log) => {
+          {displayedLogs.map((log) => {
             const catObj = CATEGORIES.find((c) => c.key === log.category) || CATEGORIES[0];
             const isMultiHour = log.endHour - log.startHour > 1;
             return (
@@ -379,9 +446,11 @@ export default function NotesScreen() {
             );
           })}
 
-          {todayLogs.length === 0 && (
+          {displayedLogs.length === 0 && (
             <View style={styles.emptyContainer}>
-              <ThemedText type="small" themeColor="textSecondary">No hours logged yet for today.</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                No hours logged yet for {isToday ? 'today' : isYesterday ? 'yesterday' : selectedDate}.
+              </ThemedText>
             </View>
           )}
         </View>
@@ -596,6 +665,23 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  dateSwitcherContainer: {
+    marginTop: Spacing.two,
+  },
+  dateSwitcherScroll: {
+    flexDirection: 'row',
+    gap: Spacing.one,
+    paddingVertical: 2,
+  },
+  dateTab: {
+    paddingVertical: 6,
+    paddingHorizontal: Spacing.two,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  dateTabText: {
+    fontSize: 12,
   },
   card: {
     borderRadius: Spacing.three,

@@ -17,7 +17,6 @@ export default function AppTabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
-        tabBarRipple: { color: 'transparent' },
         tabBarStyle: {
           backgroundColor: colors.backgroundElement,
           borderBottomColor: colors.border,
@@ -26,11 +25,6 @@ export default function AppTabs() {
           height: 54 + Math.max(insets.top, 8),
           elevation: 0,
           shadowOpacity: 0,
-        },
-        tabBarIndicatorStyle: {
-          backgroundColor: colors.primary,
-          height: 3,
-          borderRadius: 2,
         },
         tabBarLabelStyle: {
           fontSize: 12,
